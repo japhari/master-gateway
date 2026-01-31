@@ -1,0 +1,592 @@
+{
+  "urn": "urn:uuid:master-mediator-f0211f05986b11ea978fe5h",
+  "version": "0.0.1",
+  "name": "Master Mediator with GOVESB integration",
+  "description": "Mediate data exchange from Systems",
+  "defaultChannelConfig": [],
+  "endpoints": [
+    {
+      "name": "Budget",
+      "host": "localhost",
+      "path": "/budget",
+      "port": "8090",
+      "primary": true,
+      "type": "http"
+    },
+    {
+      "name": "Publish to Queue",
+      "host": "localhost",
+      "path": "/publish/{queueName}",
+      "port": "8090",
+      "primary": true,
+      "type": "http"
+    },
+    {
+      "name": "Sync ADX Data Set Values",
+      "host": "localhost",
+      "path": "/syncAdxDataSet/{adxServerPair}/{dataSetId}",
+      "port": "8090",
+      "primary": true,
+      "type": "http"
+    },
+    {
+      "name": "Sync Custom ADX source",
+      "host": "localhost",
+      "path": "/syncCustomAdxDataSource/{adxServerPair}/{dataSetId}/{periodType}/{relativePeriod}",
+      "port": "8090",
+      "primary": true,
+      "type": "http"
+    },
+    {
+      "name": "GovESB Generic Proxy",
+      "host": "localhost",
+      "path": "/govesb/{serviceCode}",
+      "port": "8090",
+      "primary": true,
+      "type": "http"
+    },
+    {
+      "name": "GovESB Push Code Bridge",
+      "host": "localhost",
+      "path": "/sendToExternalSystemWithPushCode/{path}",
+      "port": "8090",
+      "primary": true,
+      "type": "http"
+    },
+    {
+      "name": "GovESB Connection Code Bridge",
+      "host": "localhost",
+      "path": "/sendToExternalSystemWithConnectionCode/{path}",
+      "port": "8090",
+      "primary": true,
+      "type": "http"
+    },
+    {
+      "name": "GovESB Incoming Sync POST",
+      "host": "localhost",
+      "path": "/govesbmediator/{path}",
+      "port": "8090",
+      "primary": true,
+      "type": "http"
+    },
+    {
+      "name": "GovESB Incoming Sync GET",
+      "host": "localhost",
+      "path": "/getRequestFromGovesb/{path}",
+      "port": "8090",
+      "primary": true,
+      "type": "http"
+    }
+  ],
+  "configDefs": [
+    {
+      "param": "queueServer",
+      "displayName": "Queue Server Config",
+      "description": "Configurations for Queue Server",
+      "type": "struct",
+      "template": [
+        {
+          "param": "host",
+          "displayName": "Host",
+          "description": "Rqueue Server Host",
+          "type": "string"
+        },
+        {
+          "param": "port",
+          "displayName": "Port",
+          "description": "Queue Server Port",
+          "type": "number"
+        },
+        {
+          "param": "username",
+          "displayName": "Username",
+          "description": "Queue Server Username",
+          "type": "string"
+        },
+        {
+          "param": "password",
+          "displayName": "Password",
+          "description": "Queue Server Password",
+          "type": "password"
+        },
+        {
+          "param": "VHOST",
+          "displayName": "[VHOST]",
+          "description": "Queue Server VHOST",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "param": "govesb",
+      "displayName": "GovESB Credentials",
+      "description": "GOVESB Credentials",
+      "type": "struct",
+      "template": [
+        {
+          "param": "clientPrivateKey",
+          "displayName": "Client Private Key (base64 or PEM)",
+          "description": "Paste the raw value exactly as provided by GOVESB (base64 string or full PEM)",
+          "type": "string"
+        },
+        {
+          "param": "clientPublicKey",
+          "displayName": "Client Public Key (base64 or PEM)",
+          "description": "Paste the raw value exactly as provided by GOVESB (base64 string or full PEM)",
+          "type": "string"
+        },
+        {
+          "param": "govesbPublicKey",
+          "displayName": "GovESB Public Key (base64 or PEM)",
+          "description": "Paste the raw value exactly as provided by GOVESB (base64 string or full PEM)",
+          "type": "string"
+        },
+        {
+          "param": "clientId",
+          "displayName": "Client ID",
+          "description": "GovESB client identifier",
+          "type": "string"
+        },
+        {
+          "param": "clientSecret",
+          "displayName": "Client Secret",
+          "description": "GovESB client secret",
+          "type": "password"
+        },
+        {
+          "param": "accessTokenUri",
+          "displayName": "Access Token URL",
+          "description": "OAuth URL for retrieving GovESB access tokens",
+          "type": "string"
+        },
+        {
+          "param": "pushRequestUrl",
+          "displayName": "Push Request URL",
+          "description": "GovESB push request endpoint",
+          "type": "string"
+        },
+        {
+          "param": "responseRequestUrl",
+          "displayName": "Response Request URL",
+          "description": "GovESB response request endpoint",
+          "type": "string"
+        },
+        {
+          "param": "asyncRequestUrl",
+          "displayName": "Async Request URL",
+          "description": "GovESB async request endpoint",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "param": "subQueues",
+      "displayName": "Subscription Queues",
+      "description": "List of subscription queues",
+      "array": true,
+      "type": "struct",
+      "template": [
+        {
+          "param": "queueName",
+          "displayName": "Queue Name",
+          "description": "Queue Name",
+          "type": "string"
+        },
+        {
+          "param": "channelUrl",
+          "displayName": "Channel Url (http://host:port/path)",
+          "description": "Channel Url (http://host:port/path)",
+          "type": "string"
+        },
+        {
+          "param": "channelHttpMethod",
+          "displayName": "Channel HTTP method",
+          "description": "Channel HTTP method",
+          "type": "option",
+          "values": ["GET", "POST"]
+        },
+        {
+          "param": "queueStatus",
+          "displayName": "Queue Status",
+          "description": "Queue Status",
+          "type": "option",
+          "values": ["RUN", "STOP"]
+        },
+        {
+          "param": "apiPushCode",
+          "displayName": "API Push Code",
+          "description": "Optional API push code for queue routing",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "param": "pubQueues",
+      "displayName": "Allowed Publish Queues",
+      "description": "List of allowed publish  queues",
+      "array": true,
+      "type": "string"
+    },
+    {
+      "param": "synchronousPath",
+      "displayName": "Synchronous Path (External -> Internal)",
+      "description": "Mappings for synchronous requests via GOVESB to internal endpoints",
+      "array": true,
+      "type": "struct",
+      "template": [
+        {
+          "param": "sourcePath",
+          "displayName": "Source Path",
+          "description": "Path identifier",
+          "type": "string"
+        },
+        {
+          "param": "host",
+          "displayName": "Host/Base URL",
+          "description": "Target host or full URL",
+          "type": "string"
+        },
+        {
+          "param": "port",
+          "displayName": "Port",
+          "description": "Target port",
+          "type": "number"
+        },
+        {
+          "param": "automaticBuildFullUrl",
+          "displayName": "Build Full URL Automatically",
+          "description": "YES/NO",
+          "type": "option",
+          "values": ["YES", "NO"]
+        },
+        {
+          "param": "status",
+          "displayName": "Status",
+          "description": "Channel status",
+          "type": "option",
+          "values": ["RUN", "STOP"]
+        },
+        {
+          "param": "channelHttpMethod",
+          "displayName": "HTTP Method",
+          "description": "Destination HTTP method",
+          "type": "option",
+          "values": ["GET", "POST"]
+        },
+        {
+          "param": "username",
+          "displayName": "Basic Auth Username",
+          "description": "Optional username",
+          "type": "string"
+        },
+        {
+          "param": "password",
+          "displayName": "Basic Auth Password",
+          "description": "Optional password",
+          "type": "string"
+        },
+        {
+          "param": "responsible",
+          "displayName": "Responsible",
+          "description": "Owner/maintainer",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "param": "synchronousPathTwo",
+      "displayName": "Synchronous Path Two (Internal -> External with Codes)",
+      "description": "Internal to external synchronous mappings using API codes",
+      "array": true,
+      "type": "struct",
+      "template": [
+        {
+          "param": "sourcePath",
+          "displayName": "Source Path",
+          "description": "Path identifier",
+          "type": "string"
+        },
+        {
+          "param": "status",
+          "displayName": "Status",
+          "description": "Channel status",
+          "type": "option",
+          "values": ["RUN", "STOP"]
+        },
+        {
+          "param": "channelHttpMethod",
+          "displayName": "HTTP Method",
+          "description": "Destination HTTP method",
+          "type": "option",
+          "values": ["GET", "POST"]
+        },
+        {
+          "param": "apiPushCode",
+          "displayName": "API Push Code",
+          "description": "Push code for GOVESB",
+          "type": "string"
+        },
+        {
+          "param": "apiCode",
+          "displayName": "API Code",
+          "description": "API code for GOVESB",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "param": "synchronousPullRequest",
+      "displayName": "Synchronous Pull Request (Internal -> GOVESB)",
+      "description": "Internal to GOVESB synchronous pull request mappings",
+      "array": true,
+      "type": "struct",
+      "template": [
+        {
+          "param": "sourcePath",
+          "displayName": "Source Path",
+          "description": "Path identifier",
+          "type": "string"
+        },
+        {
+          "param": "status",
+          "displayName": "Status",
+          "description": "Channel status",
+          "type": "option",
+          "values": ["RUN", "STOP"]
+        },
+        {
+          "param": "channelHttpMethod",
+          "displayName": "HTTP Method",
+          "description": "Destination HTTP method",
+          "type": "option",
+          "values": ["GET", "POST"]
+        },
+        {
+          "param": "apiCode",
+          "displayName": "API Code",
+          "description": "API code for GOVESB",
+          "type": "string"
+        },
+        {
+          "param": "connectionCode",
+          "displayName": "Connection Code",
+          "description": "Connection code for GOVESB",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "param": "adxServerPair",
+      "displayName": "ADX Server Pair",
+      "description": "Adx Data Value Server Pair to sync",
+      "array": true,
+      "type": "struct",
+      "template": [
+        {
+          "param": "name",
+          "displayName": "Name ",
+          "description": "Server pair Name e.g HMIS_IMES",
+          "type": "string"
+        },
+        {
+          "param": "dataSetUrl",
+          "displayName": "Data Set Url",
+          "description": "Data Set Url with #{dataSetId} place holder",
+          "type": "string"
+        },
+        {
+          "param": "dataSetIdScheme",
+          "displayName": "Data Set Id schems(JSON Object)",
+          "description": "Data Set Id scheme e.g '{dataElement:'CODE', orgUnit:'ATTRIBUTE:L4ksO7A8gpo'}'",
+          "type": "string"
+        },
+        {
+          "param": "sourceUrl",
+          "displayName": "Source Url",
+          "description": "Data Value Source Url with #{dataElements}, #{orgUnits}, #{period} placeholer",
+          "type": "string"
+        },
+        {
+          "param": "sourceUsername",
+          "displayName": "Source Username",
+          "description": "Data Value Source username",
+          "type": "string"
+        },
+        {
+          "param": "sourcePassword",
+          "displayName": "Source Password",
+          "description": "Data Value Source password",
+          "type": "string"
+        },
+        {
+          "param": "sourceMethod",
+          "displayName": "Source HTTP method",
+          "description": "Source HTTP method",
+          "type": "option",
+          "values": ["GET", "POST"]
+        },
+        {
+          "param": "destinationUrl",
+          "displayName": "Destination Url",
+          "description": "Data Value Destination Url",
+          "type": "string"
+        },
+        {
+          "param": "destinationUsername",
+          "displayName": "Destination Username",
+          "description": "Data Value Destination username",
+          "type": "string"
+        },
+        {
+          "param": "destinationPassword",
+          "displayName": "Destination Password",
+          "description": "Data Value Destination password",
+          "type": "string"
+        },
+        {
+          "param": "destinationMethod",
+          "displayName": "Destination HTTP method",
+          "description": "Destination HTTP method",
+          "type": "option",
+          "values": ["POST", "PUT"]
+        },
+        {
+          "param": "relativePeriod",
+          "displayName": "Relative Past Period(e.g 0, 1, 2)",
+          "description": "Relative Past Period to current time period",
+          "type": "string"
+        },
+        {
+          "param": "ouPageSize",
+          "displayName": "Pages",
+          "description": "Number of pages for Organisation To get and save data",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "param": "customAdxServerPair",
+      "displayName": "Custom ADX Server Pair",
+      "description": "Adx Data Value Server Pair to sync",
+      "array": true,
+      "type": "struct",
+      "template": [
+        {
+          "param": "name",
+          "displayName": "Name ",
+          "description": "Server pair Name e.g HMIS",
+          "type": "string"
+        },
+        {
+          "param": "sourceUrl",
+          "displayName": "Source Url",
+          "description": "Data Value Source Url with #{dataSetId}, #{periodType}, #{relativePeriod} placeholder",
+          "type": "string"
+        },
+        {
+          "param": "sourceUsername",
+          "displayName": "Source Username",
+          "description": "Data Value Source username",
+          "type": "string"
+        },
+        {
+          "param": "sourcePassword",
+          "displayName": "Source Password",
+          "description": "Data Value Source password",
+          "type": "string"
+        },
+        {
+          "param": "destinationUrl",
+          "displayName": "Destination Url",
+          "description": "Data Value Destination Url",
+          "type": "string"
+        },
+        {
+          "param": "destinationUsername",
+          "displayName": "Destination Username",
+          "description": "Data Value Destination username",
+          "type": "string"
+        },
+        {
+          "param": "destinationPassword",
+          "displayName": "Destination Password",
+          "description": "Data Value Destination password",
+          "type": "string"
+        },
+        {
+          "param": "destinationMethod",
+          "displayName": "Destination HTTP method",
+          "description": "Destination HTTP method",
+          "type": "option",
+          "values": ["POST", "PUT"]
+        }
+      ]
+    }
+  ],
+  "config": {
+    "adxServerPair": [],
+    "subQueues": [
+      {
+        "queueStatus": "RUN",
+        "channelHttpMethod": "POST",
+        "channelUrl": "http://localhost:5001/test-queue",
+        "queueName": "TEST_QUEUE"
+      }
+    ],
+    "pubQueues": ["TEST_QUEUE"],
+    "synchronousPath": [
+      {
+        "sourcePath": "tamisemi-tisp-api",
+        "host": "http://172.16.18.143",
+        "port": 8085,
+        "automaticBuildFullUrl": "YES",
+        "status": "RUN",
+        "channelHttpMethod": "POST"
+      },
+      {
+        "sourcePath": "example",
+        "host": "https://api.nasa.gov/planetary/apod",
+        "port": 8085,
+        "automaticBuildFullUrl": "NO",
+        "status": "RUN",
+        "channelHttpMethod": "GET"
+      }
+    ],
+    "synchronousPathTwo": [
+      {
+        "sourcePath": "tp-to-brela",
+        "status": "RUN",
+        "channelHttpMethod": "POST",
+        "apiPushCode": "4PrUIzNR",
+        "apiCode": "4PrUIzNR"
+      }
+    ],
+    "synchronousPullRequest": [
+      {
+        "sourcePath": "basata_govesb",
+        "status": "RUN",
+        "channelHttpMethod": "POST",
+        "apiCode": "aA55xF4m",
+        "connectionCode": "aA55xF4m"
+      }
+    ],
+    "queueServer": {
+      "password": "guest",
+      "username": "guest",
+      "port": 5672,
+      "host": "localhost",
+      "VHOST": "/"
+    },
+    "govesb": {
+      "clientPrivateKey": "MD4CAQAwEAYHKoZIzj0CAQYFK4EEAAoEJzAlAgEBBCA5XN+a1Pll33Nb8rGZmboLPSneSpX3wOxJvOOxam1alg==",
+      "clientPublicKey": "MFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEs/Z4JNkbDChNm9KW4wwHquwoByLBc0iFZVTaYixH7nvmCxcFLQUnP0R4B0If8vYovvay6aSlxero2mA5au4N0Q==",
+      "govesbPublicKey": "MFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEon0az66Kz+6ZIz4G7La8uPeSbOT/E/suRjNMgFQ4isjJwFXaS20vHcndEFxXz8M68sbxkbLrGuNS/wFcEzubWQ==",
+      "clientId": "40522034-be6a-11f0-956b-0925b481a971",
+      "clientSecret": "BKz0LNZVoFqTccsCwIuspVvMaxsR4jA4",
+      "accessTokenUri": "https://esbdemo.gov.go.tz/gw/govesb-uaa/oauth/token",
+      "pushRequestUrl": "https://esbdemo.gov.go.tz/engine/esb/push-request",
+      "responseRequestUrl": "https://esbdemo.gov.go.tz/engine/esb/request",
+      "asyncRequestUrl": "https://esbdemo.gov.go.tz/engine/esb/async"
+    }
+  }
+}

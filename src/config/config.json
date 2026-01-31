@@ -1,0 +1,12 @@
+{
+  "api": {
+    "username": "admin@dcea.go.tz",
+    "password": "default-password",
+    "apiURL": "https://127.0.0.1:17070",
+    "trustSelfSigned": true,
+    "urn": "ebd986bf5f0211f0a6c6b11ea978fe3f"
+  },
+  "httpPort": 8090,
+  "register": true,
+  "heartbeat": true
+}

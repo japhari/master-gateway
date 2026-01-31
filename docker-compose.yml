@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  master-mediator:
+    build: .
+    container_name: master-mediator-app
+    restart: unless-stopped
+    ports:
+      - '8090:8090'
+    environment:
+      NODE_ENV: production
+    # RabbitMQ is expected to be provided externally (host install or another stack).
+    # In Docker, set queueServer.host in src/config/mediator.json to a reachable
+    # hostname/IP, for example:
+    #   - host.docker.internal  (RabbitMQ on the Docker host)
+    #   - an IP / DNS name for a remote RabbitMQ instance

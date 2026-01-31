@@ -1,0 +1,129 @@
+ASYNC Request 
+- Url - /api/channel/aync-gcla (To receive data from GOVESB)
+
+PULL - Asynchronous ( - Send Request one - Then receive acknowl)
+ApiCode
+Return Url - To receive your answers
+RequestId - Reference 
+
+PUSH - The one who registered end point is the one who will start 
+     - Return Url - To receive your answers
+
+docker compose run --rm master-mediator sh -c "apk add --no-cache curl >/dev/null 2>&1 || true; curl -sS telnet://172.16.16.172:5672 || nc -vz 172.16.16.172 5672"
+
+
+//Reading Key Information
+openssl ec -in privateKey.pem -text -noout
+
+//public key
+openssl ecparam -name secp256k1 -genkey -out privateKey.pem
+or
+openssl ecparam -name secp521r1 -genkey -out privateKey.pem
+
+
+//private key
+openssl ec -in privateKey.pem -pubout -out publicKey.pem
+
+
+
+
+
+curl -s -X POST 'https://esbdemo.gov.go.tz/gw/govesb-uaa/oauth/token' \
+  -u '40522034-be6a-11f0-956b-0925b481a971:BKz0LNZVoFqTccsCwIuspVvMaxsR4jA4' \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  -d 'grant_type=client_credentials&client_id=40522034-be6a-11f0-956b-0925b481a971&client_secret=BKz0LNZVoFqTccsCwIuspVvMaxsR4jA4' | jq .
+
+
+dcea-gcla-company-list
+
+
+curl -s -X POST http://172.16.16.172:8090/govesb/EfOOOY2q \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "startDate": "2024-07-01",
+    "endDate": "2025-16-30"
+  }' | jq .
+
+  curl "http://172.16.16.172:8090/govesb/get/EfOOOY2q?startDate=2024-07-01&endDate=2025-06-30&page=10&size=0" | jq .
+
+
+
+curl -s -X POST http://localhost:8090/govesb/EfOOY2q \
+  -H 'Content-Type: application/json' \
+  -d '{"data":"example"}' | jq .
+
+  curl -s -X POST http://localhost:8090/sendToExternalSystemWithConnectionCode/basata_govesb \ 
+  -H 'Content-Type: application/json' \
+  -d '{"data":"example"}' | jq .
+{
+  "success": true,
+  "esbBody": "{\"success\":true,\"requestId\":\"88f43e60c7a311f0b260c9e352c912e9\",\"esbBody\":{\"requestId\":\"88f43e60c7a311f0b260c9e352c912e9\",\"message\":\"Exhibit Received successfully\"}}",
+  "message": "Payload routed via GOVESB connection code"
+}
+
+
+curl -s -X POST http://localhost:8090/sendToExternalSystemWithConnectionCode/basata_govesb \
+  -H "Content-Type: application/json" \
+  -d '{
+    "refNumber": "CBC.476/759/01/13",
+    "district": "SIRARI",
+    "station": "SIRARI",
+    "attachment": "String",
+    "description": "Drugs Trafficing",
+    "region": "TARIME-RORYA",
+    "irNumber": "SIR/IR/1604/2025",
+    "notificationEmail": "occid.SIRARI@tpf.go.tz",
+    "submittingOfficer": "J.1287 D/CPL GIDION",
+    "items": [
+      {
+        "itemId": 45515,
+        "itemDetails": "DRUGS OF ABUSE",
+        "itemDescription": "label:A2",
+        "description": "KIFURUSHI KIDOGO CHA MAJANI MABICHI YADHANIWAYO KUWA NI DAWA ZAKULEVYA AINA YA MIRINGI",
+        "remarks": "NIMEHAKIKI"
+      }
+    ]
+  }' | jq .
+
+
+curl -s -X POST http://172.16.16.172:8090/sendToExternalSystemWithConnectionCode/dcea-gcla-sample-information \
+  -H "Content-Type: application/json" \
+  -d '{
+    "refNumber": "CBC.476/759/01/13",
+    "district": "SIRARI",
+    "station": "SIRARI",
+    "attachment": "String",
+    "description": "Drugs Trafficing",
+    "region": "TARIME-RORYA",
+    "irNumber": "SIR/IR/1604/2025",
+    "notificationEmail": "occid.SIRARI@tpf.go.tz",
+    "submittingOfficer": "J.1287 D/CPL GIDION",
+    "items": [
+      {
+        "itemId": 45515,
+        "itemDetails": "DRUGS OF ABUSE",
+        "itemDescription": "label:A2",
+        "description": "KIFURUSHI KIDOGO CHA MAJANI MABICHI YADHANIWAYO KUWA NI DAWA ZAKULEVYA AINA YA MIRINGI",
+        "remarks": "NIMEHAKIKI"
+      }
+    ]
+  }' | jq .
+
+
+
+curl -s -X POST http://localhost:8090/publish/TEST_QUEUE \
+  -H 'Content-Type: application/json' \
+  -d '{"hello":"rabbit","time":"now"}' | jq .
+
+
+❯ curl -s http://localhost:8090/queue/TEST_QUEUE/consume-one | jq .
+
+  
+LOCAL TEST API 
+
+node -e "require('http').createServer((req,res)=>{let b='';req.on('data',c=>b+=c);req.on('end',()=>{console.log('test-queue got:', b);res.writeHead(200, {'Content-Type':'application/json'});res.end(JSON.stringify({ok:true,received:JSON.parse(b||'{}')}));});}).listen(5001);"
+
+
+docker build -t master-mediator .
+
+docker compose up --build
