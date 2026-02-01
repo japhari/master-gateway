@@ -578,11 +578,11 @@
       "VHOST": "/"
     },
     "govesb": {
-      "clientPrivateKey": "MD4CAQAwEAYHKoZIzj0CAQYFK4EEAAoEJzAlAgEBBCA5XN+a1Pll33Nb8rGZmboLPSneSpX3wOxJvOOxam1alg==",
-      "clientPublicKey": "MFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEs/Z4JNkbDChNm9KW4wwHquwoByLBc0iFZVTaYixH7nvmCxcFLQUnP0R4B0If8vYovvay6aSlxero2mA5au4N0Q==",
+      "clientPrivateKey": "MD4CAQAwEAYHKoZIzj0CAQYFK4EEAAoEJzAlAgEBBCCQ2NpfUXNGXJ/MHAflPR++aAIm2sjjNDuwxmym0XOGFg==",
+      "clientPublicKey": "MFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEpKXUn8u8r2Etg4K96rfPyYwVTrtHPvZVYXvvlR1Ta9M7G0IKKpUoeW47ZYUios0oqUxWzplLnWT1dPVj2aeNGQ==",
       "govesbPublicKey": "MFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEon0az66Kz+6ZIz4G7La8uPeSbOT/E/suRjNMgFQ4isjJwFXaS20vHcndEFxXz8M68sbxkbLrGuNS/wFcEzubWQ==",
-      "clientId": "40522034-be6a-11f0-956b-0925b481a971",
-      "clientSecret": "BKz0LNZVoFqTccsCwIuspVvMaxsR4jA4",
+      "clientId": "ebb2f543-ff04-11ee-a4cd-cf3cf83aeb5e",
+      "clientSecret": "ayWznGxQzcFA8lBxHr1TLIRunpmQxCjw",
       "accessTokenUri": "https://esbdemo.gov.go.tz/gw/govesb-uaa/oauth/token",
       "pushRequestUrl": "https://esbdemo.gov.go.tz/engine/esb/push-request",
       "responseRequestUrl": "https://esbdemo.gov.go.tz/engine/esb/request",

@@ -118,7 +118,6 @@ export function getConfiguration() {
 
 
 export async function ProcessConsumeToQueue() {
-
     const configs: any = await getConfiguration();
     let destinations = configs.subQueues.filter((values: any) => values.queueStatus === 'RUN');
 
@@ -141,7 +140,6 @@ export async function ProcessConsumeToQueue() {
 
 
 export async function createpublisherQueue() {
-
     const configs: any = await getConfiguration();
     const pubQueues = configs.pubQueues;
 
