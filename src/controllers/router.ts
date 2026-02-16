@@ -20,6 +20,15 @@ function json(res: ServerResponse, status: number, data: any): void {
     res.end(payload);
 }
 
+function extractTrackingRequestId(body: any): string {
+    const candidate =
+        body?.requestId ??
+        body?.data?.requestId ??
+        body?.esbBody?.requestId ??
+        body?.data?.esbBody?.requestId;
+    return candidate?.toString?.().trim?.() || '';
+}
+
 async function readBody(req: IncomingMessage): Promise<any> {
     const chunks: Buffer[] = [];
     for await (const chunk of req) {
@@ -127,6 +136,77 @@ export const routes: Record<string, RouteHandler> = {
         const requestId = params.requestId?.trim();
         if (!requestId) {
             return json(res, 400, { success: false, message: 'Missing requestId' });
+        }
+        const record = requestTrackerService.get(requestId);
+        if (!record) {
+            return json(res, 404, {
+                success: false,
+                message: 'Request ID not found in tracker. It may be expired or unknown.',
+                requestId,
+            });
+        }
+        return json(res, 200, {
+            success: true,
+            message: 'Request status retrieved successfully',
+            data: record,
+        });
+    },
+
+    'POST /request-status': async (_req, res, _params, body) => {
+        const requestId = extractTrackingRequestId(body);
+        if (!requestId) {
+            return json(res, 400, {
+                success: false,
+                message: 'Missing requestId in request body',
+            });
+        }
+        const record = requestTrackerService.get(requestId);
+        if (!record) {
+            return json(res, 404, {
+                success: false,
+                message: 'Request ID not found in tracker. It may be expired or unknown.',
+                requestId,
+            });
+        }
+        return json(res, 200, {
+            success: true,
+            message: 'Request status retrieved successfully',
+            data: record,
+        });
+    },
+
+    // Alias for integrations that already call /tracker
+    'POST /tracker': async (_req, res, _params, body) => {
+        const requestId = extractTrackingRequestId(body);
+        if (!requestId) {
+            return json(res, 400, {
+                success: false,
+                message: 'Missing requestId in request body',
+            });
+        }
+        const record = requestTrackerService.get(requestId);
+        if (!record) {
+            return json(res, 404, {
+                success: false,
+                message: 'Request ID not found in tracker. It may be expired or unknown.',
+                requestId,
+            });
+        }
+        return json(res, 200, {
+            success: true,
+            message: 'Request status retrieved successfully',
+            data: record,
+        });
+    },
+
+    // Alias for router-based channels that call /api/v1/faru/tracker
+    'POST /api/v1/faru/tracker': async (_req, res, _params, body) => {
+        const requestId = extractTrackingRequestId(body);
+        if (!requestId) {
+            return json(res, 400, {
+                success: false,
+                message: 'Missing requestId in request body',
+            });
         }
         const record = requestTrackerService.get(requestId);
         if (!record) {
