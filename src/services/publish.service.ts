@@ -1,12 +1,20 @@
 import { configService } from './config.service';
 import { rabbitmqService } from './rabbitmq.service';
 import { jwtService } from './jwt.service';
+import { randomUUID } from 'crypto';
+import { requestTrackerService } from './request-tracker.service';
 
 export class PublishService {
   async publish(queueName: string, payload: any, requestId: string | null): Promise<{ status: number; body: any }> {
+    const effectiveRequestId = requestId?.trim() || randomUUID();
     const { config, queue } = await configService.findPubQueue(queueName);
     if (!queue) {
-      return this.response(400, { success: false, message: 'Invalid Destination', esbBody: '' });
+      return this.response(400, {
+        success: false,
+        message: 'Invalid destination queue',
+        requestId: effectiveRequestId,
+        esbBody: '',
+      });
     }
 
     const properties = {
@@ -18,17 +26,41 @@ export class PublishService {
       queueName,
     };
 
-    const queued = await rabbitmqService.publishWithConfig(queueName, payload, properties, requestId);
+    const queued = await rabbitmqService.publishWithConfig(
+      queueName,
+      payload,
+      properties,
+      effectiveRequestId,
+    );
     if (queued) {
+      requestTrackerService.markQueued({
+        requestId: effectiveRequestId,
+        queueName,
+      });
       const data = {
         success: true,
-        esbBody: { status: 'Your request is now queued for processing' },
-        message: 'You will receive a response shortly',
+        requestId: effectiveRequestId,
+        status: 'QUEUED',
+        trackingPath: `/request-status/${effectiveRequestId}`,
+        esbBody: {
+          status: 'Your request is now queued for processing',
+        },
+        message: 'Request accepted and queued. Use requestId to track progress.',
       };
       return this.response(200, data);
     }
 
-    const data = { success: false, esbBody: '', message: 'Something went wrong while queueing your request' };
+    requestTrackerService.markFailed(effectiveRequestId, {
+      code: 'QUEUE_PUBLISH_FAILED',
+      message: 'Failed to publish request to queue',
+    });
+    const data = {
+      success: false,
+      requestId: effectiveRequestId,
+      status: 'FAILED',
+      esbBody: '',
+      message: 'Something went wrong while queueing your request',
+    };
     return this.response(500, data);
   }
 

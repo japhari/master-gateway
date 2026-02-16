@@ -4,6 +4,7 @@ import { govesbService } from '../services/govesb.service';
 import { publishService } from '../services/publish.service';
 import { synchronousService } from '../services/synchronous.service';
 import { rabbitmqService } from '../services/rabbitmq.service';
+import { requestTrackerService } from '../services/request-tracker.service';
 
 type RouteHandler = (
     req: IncomingMessage,
@@ -120,6 +121,26 @@ export const routes: Record<string, RouteHandler> = {
                 message: err?.message || 'Failed to consume message',
             });
         }
+    },
+
+    'GET /request-status/:requestId': async (_req, res, params) => {
+        const requestId = params.requestId?.trim();
+        if (!requestId) {
+            return json(res, 400, { success: false, message: 'Missing requestId' });
+        }
+        const record = requestTrackerService.get(requestId);
+        if (!record) {
+            return json(res, 404, {
+                success: false,
+                message: 'Request ID not found in tracker. It may be expired or unknown.',
+                requestId,
+            });
+        }
+        return json(res, 200, {
+            success: true,
+            message: 'Request status retrieved successfully',
+            data: record,
+        });
     },
 
     'POST /sendToExternalSystemWithPushCode/:path': async (_req, res, params, body) => {

@@ -5,9 +5,10 @@ import { getOneMessageFromQueue } from '../rabbitHelper/rabbitmq';
 export class RabbitmqService {
     async publishWithConfig(queueName: string, message: any, configs: any, requestId: string | null): Promise<boolean> {
         try {
-            if (requestId) {
-                message['requestId'] = requestId;
-            }
+            const payload =
+                message && typeof message === 'object'
+                    ? { ...message, ...(requestId ? { requestId } : {}) }
+                    : { value: message, ...(requestId ? { requestId } : {}) };
 
             const port = isNaN(configs.queueServerPort) ? '' : ':' + configs.queueServerPort;
             let queueServer = configs.queueServerHost + port;
@@ -19,7 +20,7 @@ export class RabbitmqService {
                 queueServer = queueServer + '/' + configs.queueServerVHOST;
             }
 
-            const queueResponse = await publishToRabbitmqWithServer(queueServer, queueName, message);
+            const queueResponse = await publishToRabbitmqWithServer(queueServer, queueName, payload);
             return !!queueResponse;
         } catch (err) {
             console.error(err);

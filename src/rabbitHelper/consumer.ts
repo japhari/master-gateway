@@ -3,25 +3,69 @@ import axios from 'axios';
 import { from } from 'rxjs';
 import winston from 'winston';
 import { sendViaGovesb } from '../govesb/govesb-client';
+import { requestTrackerService } from '../services/request-tracker.service';
 
 import * as http from 'http';
 import * as https from 'https';
 
 const loggerTag = 'RabbitHelper';
+type ActiveConsumer = {
+  consumerTag: string;
+  method: string;
+  url: string;
+};
+const activeConsumers = new Map<string, ActiveConsumer>();
 
 export async function consumeFromRabbitmq(queueName: string, method: string, url: string) {
 
   try {
-
     const channel = getRabbitmqChannel();
+    const targetMethod = (method || 'POST').toUpperCase();
+    const targetUrl = (url || '').trim();
+    if (!targetUrl) {
+      winston.warn(`[${loggerTag}] Skipping consumer setup for ${queueName}: empty channelUrl`);
+      return;
+    }
+
+    const existing = activeConsumers.get(queueName);
+    if (existing && existing.method === targetMethod && existing.url === targetUrl) {
+      winston.info(
+        `[${loggerTag}] Consumer unchanged for ${queueName} -> ${targetMethod} ${targetUrl}`,
+      );
+      return;
+    }
+
+    if (existing?.consumerTag) {
+      await channel.cancel(existing.consumerTag);
+      winston.info(`[${loggerTag}] Rebinding consumer for ${queueName}`);
+    }
+
     await channel.assertQueue(queueName);
-    await channel.consume(queueName, message => {
-      const input = JSON.parse(message.content.toString());
+
+    const consumeReply = await channel.consume(queueName, async message => {
+      if (!message) return;
+
+      let input: any;
+      try {
+        input = JSON.parse(message.content.toString());
+      } catch {
+        input = message.content.toString();
+      }
+
       console.log(`Received Message:`, input);
-      processComsumedMessage(input, queueName, method, url);
+      await processComsumedMessage(input, queueName, targetMethod, targetUrl);
       channel.ack(message);
     });
-    console.log(`Waiting22 for messages from ${queueName}...`);
+
+    activeConsumers.set(queueName, {
+      consumerTag: consumeReply.consumerTag,
+      method: targetMethod,
+      url: targetUrl,
+    });
+
+    console.log(
+      `Waiting22 for messages from ${queueName} -> ${targetMethod} ${targetUrl}...`,
+    );
 
   } catch (error) {
     console.error('Waiting Queue Error:', error);
@@ -29,11 +73,18 @@ export async function consumeFromRabbitmq(queueName: string, method: string, url
   }
 }
 
-export function processComsumedMessage(message: string, queueName: string, method: string, url: string) {
+export async function processComsumedMessage(message: string, queueName: string, method: string, url: string) {
   if (url) {
-    // Fire-and-forget HTTP/GOVESB forwarding; log errors without crashing the worker.
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    sendData('POST', url, message, queueName);
+    const requestId = extractRequestId(message);
+    if (requestId) {
+      requestTrackerService.markQueued({
+        requestId,
+        queueName,
+        targetUrl: url,
+        method,
+      });
+    }
+    await sendData(method, url, message, queueName, requestId || undefined);
   }
 
 }
@@ -44,6 +95,7 @@ export async function sendData(
   url: string,
   payload: any,
   sourceQueue?: string,
+  requestId?: string,
 ) {
   winston.info(`Sending request to ${url}`);
 
@@ -57,10 +109,24 @@ export async function sendData(
         config: {},
       });
       winston.info(`Response from GOVESB for ${serviceCode}`);
+      if (requestId) {
+        requestTrackerService.markForwarded(requestId, { targetUrl: url, method });
+      }
       return data;
     } catch (error: any) {
       winston.error(`Error during GOVESB request for ${serviceCode}`);
       winston.error(error?.message || error);
+      const failedError = {
+        code: error?.code,
+        message: error?.message || 'GOVESB request failed',
+        status: error?.response?.status,
+      };
+      if (requestId) {
+        requestTrackerService.markFailed(requestId, failedError, {
+          targetUrl: url,
+          method,
+        });
+      }
       if (sourceQueue) {
         // Best-effort: move failed message to a companion failed queue.
         await sendToFailedQueue(sourceQueue, payload, url, error);
@@ -100,14 +166,33 @@ export async function sendData(
   });
 
   try {
-    const res = await axiosInstance.post(url, payload);
-    winston.info(`Response from ${url}`);
+    const reqMethod = (method || 'POST').toUpperCase();
+    const res = await axiosInstance.request({
+      method: reqMethod,
+      url,
+      data: payload,
+    });
+    winston.info(`Response from ${url} with status ${res.status}`);
+    if (requestId) {
+      requestTrackerService.markForwarded(requestId, { targetUrl: url, method: reqMethod });
+    }
     return res.data;
   } catch (error: any) {
     winston.error(`Error during request to ${url}`);
     winston.error(
       `Forwarding error: ${error?.code || ''} ${error?.message || error}`,
     );
+    const failedError = {
+      code: error?.code,
+      message: error?.message || 'HTTP forwarding failed',
+      status: error?.response?.status,
+    };
+    if (requestId) {
+      requestTrackerService.markFailed(requestId, failedError, {
+        targetUrl: url,
+        method,
+      });
+    }
     if (sourceQueue) {
       // Best-effort: move failed message to a companion failed queue.
       await sendToFailedQueue(sourceQueue, payload, url, error);
@@ -115,6 +200,12 @@ export async function sendData(
     // Do not rethrow; swallow the error so the worker continues running.
     return null;
   }
+}
+
+function extractRequestId(payload: any): string | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const candidate = payload.requestId ?? payload?.data?.requestId;
+  return typeof candidate === 'string' && candidate.trim() ? candidate.trim() : null;
 }
 
 /**

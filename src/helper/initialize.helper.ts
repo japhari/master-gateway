@@ -133,8 +133,15 @@ export async function ProcessConsumeToQueue() {
     }
 
     for (let i = 0; i < destinations.length; i++) {
-        //consumeFromRabbitmq(destinations[i].queueName)
-        consumeFromRabbitmq(destinations[i].queueName, destinations[i].channelHttpMethod, destinations[i].channelUrl)
+        winston.info(
+            `Binding queue consumer ${destinations[i].queueName} -> ${destinations[i].channelHttpMethod || 'POST'
+            } ${destinations[i].channelUrl}`,
+        );
+        await consumeFromRabbitmq(
+            destinations[i].queueName,
+            destinations[i].channelHttpMethod,
+            destinations[i].channelUrl,
+        );
     }
 }
 
