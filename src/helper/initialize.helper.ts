@@ -141,6 +141,7 @@ export async function ProcessConsumeToQueue() {
             destinations[i].queueName,
             destinations[i].channelHttpMethod,
             destinations[i].channelUrl,
+            destinations[i],
         );
     }
 }

@@ -215,7 +215,19 @@
         {
           "param": "apiPushCode",
           "displayName": "API Push Code",
-          "description": "Optional API push code for queue routing",
+          "description": "Optional API key value used as fallback for outbound queue calls",
+          "type": "string"
+        },
+        {
+          "param": "apiKey",
+          "displayName": "API Key",
+          "description": "Optional API key value for outbound queue calls",
+          "type": "string"
+        },
+        {
+          "param": "apiKeyHeader",
+          "displayName": "API Key Header Name",
+          "description": "Header name for API key (default: api-key)",
           "type": "string"
         }
       ]

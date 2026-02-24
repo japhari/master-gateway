@@ -13,22 +13,37 @@ type ActiveConsumer = {
   consumerTag: string;
   method: string;
   url: string;
+  apiKey?: string;
+  apiKeyHeader?: string;
 };
 const activeConsumers = new Map<string, ActiveConsumer>();
 
-export async function consumeFromRabbitmq(queueName: string, method: string, url: string) {
+export async function consumeFromRabbitmq(
+  queueName: string,
+  method: string,
+  url: string,
+  destinationConfig?: any,
+) {
 
   try {
     const channel = getRabbitmqChannel();
     const targetMethod = (method || 'POST').toUpperCase();
     const targetUrl = (url || '').trim();
+    const apiKey = destinationConfig?.apiKey || destinationConfig?.apiPushCode || '';
+    const apiKeyHeader = destinationConfig?.apiKeyHeader || 'api-key';
     if (!targetUrl) {
       winston.warn(`[${loggerTag}] Skipping consumer setup for ${queueName}: empty channelUrl`);
       return;
     }
 
     const existing = activeConsumers.get(queueName);
-    if (existing && existing.method === targetMethod && existing.url === targetUrl) {
+    if (
+      existing &&
+      existing.method === targetMethod &&
+      existing.url === targetUrl &&
+      existing.apiKey === apiKey &&
+      existing.apiKeyHeader === apiKeyHeader
+    ) {
       winston.info(
         `[${loggerTag}] Consumer unchanged for ${queueName} -> ${targetMethod} ${targetUrl}`,
       );
@@ -53,7 +68,10 @@ export async function consumeFromRabbitmq(queueName: string, method: string, url
       }
 
       console.log(`Received Message:`, input);
-      await processComsumedMessage(input, queueName, targetMethod, targetUrl);
+      await processComsumedMessage(input, queueName, targetMethod, targetUrl, {
+        apiKey,
+        apiKeyHeader,
+      });
       channel.ack(message);
     });
 
@@ -61,6 +79,8 @@ export async function consumeFromRabbitmq(queueName: string, method: string, url
       consumerTag: consumeReply.consumerTag,
       method: targetMethod,
       url: targetUrl,
+      apiKey,
+      apiKeyHeader,
     });
 
     console.log(
@@ -73,7 +93,13 @@ export async function consumeFromRabbitmq(queueName: string, method: string, url
   }
 }
 
-export async function processComsumedMessage(message: string, queueName: string, method: string, url: string) {
+export async function processComsumedMessage(
+  message: string,
+  queueName: string,
+  method: string,
+  url: string,
+  destinationAuth?: { apiKey?: string; apiKeyHeader?: string },
+) {
   if (url) {
     const requestId = extractRequestId(message);
     if (requestId) {
@@ -84,7 +110,14 @@ export async function processComsumedMessage(message: string, queueName: string,
         method,
       });
     }
-    await sendData(method, url, message, queueName, requestId || undefined);
+    await sendData(
+      method,
+      url,
+      message,
+      queueName,
+      requestId || undefined,
+      destinationAuth,
+    );
   }
 
 }
@@ -96,6 +129,7 @@ export async function sendData(
   payload: any,
   sourceQueue?: string,
   requestId?: string,
+  destinationAuth?: { apiKey?: string; apiKeyHeader?: string },
 ) {
   winston.info(`Sending request to ${url}`);
 
@@ -115,12 +149,8 @@ export async function sendData(
       return data;
     } catch (error: any) {
       winston.error(`Error during GOVESB request for ${serviceCode}`);
-      winston.error(error?.message || error);
-      const failedError = {
-        code: error?.code,
-        message: error?.message || 'GOVESB request failed',
-        status: error?.response?.status,
-      };
+      const failedError = extractForwardingError(error, 'GOVESB request failed');
+      winston.error(failedError.message);
       if (requestId) {
         requestTrackerService.markFailed(requestId, failedError, {
           targetUrl: url,
@@ -158,6 +188,9 @@ export async function sendData(
       'Content-Type': 'application/json',
       'accept-encoding': 'gzip,deflate',
       'service-code': serviceCode,
+      ...(destinationAuth?.apiKey
+        ? { [destinationAuth.apiKeyHeader || 'api-key']: destinationAuth.apiKey }
+        : {}),
     },
     timeout: 300000,
     maxBodyLength: Infinity,
@@ -179,14 +212,8 @@ export async function sendData(
     return res.data;
   } catch (error: any) {
     winston.error(`Error during request to ${url}`);
-    winston.error(
-      `Forwarding error: ${error?.code || ''} ${error?.message || error}`,
-    );
-    const failedError = {
-      code: error?.code,
-      message: error?.message || 'HTTP forwarding failed',
-      status: error?.response?.status,
-    };
+    const failedError = extractForwardingError(error, 'HTTP forwarding failed');
+    winston.error(`Forwarding error: ${failedError.code || ''} ${failedError.message}`);
     if (requestId) {
       requestTrackerService.markFailed(requestId, failedError, {
         targetUrl: url,
@@ -208,6 +235,24 @@ function extractRequestId(payload: any): string | null {
   return typeof candidate === 'string' && candidate.trim() ? candidate.trim() : null;
 }
 
+function extractForwardingError(
+  error: any,
+  fallbackMessage: string,
+): { code?: string; message: string; status?: number } {
+  const responseData = error?.response?.data;
+  const responseMessage =
+    (typeof responseData?.message === 'string' && responseData.message) ||
+    (typeof responseData?.error === 'string' && responseData.error) ||
+    (typeof responseData?.data?.message === 'string' && responseData.data.message) ||
+    '';
+
+  return {
+    code: error?.code,
+    status: error?.response?.status,
+    message: responseMessage || error?.message || fallbackMessage,
+  };
+}
+
 /**
  * Publish a failed message to a dedicated failed queue so it is not lost.
  * Queue name pattern: <SOURCE_QUEUE>_FAILED.
@@ -222,15 +267,12 @@ async function sendToFailedQueue(
   try {
     const channel = getRabbitmqChannel();
     await channel.assertQueue(failedQueue);
+    const derivedError = extractForwardingError(error, 'Forwarding request failed');
     const body = {
       sourceQueue,
       failedAt: new Date().toISOString(),
       targetUrl: url,
-      error: {
-        code: error?.code,
-        message: error?.message || String(error),
-        status: error?.response?.status,
-      },
+      error: derivedError,
       payload,
     };
     channel.sendToQueue(
