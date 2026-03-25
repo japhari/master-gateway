@@ -36,11 +36,55 @@ async function readBody(req: IncomingMessage): Promise<any> {
     }
     if (!chunks.length) return undefined;
     const raw = Buffer.concat(chunks).toString('utf8');
+    const contentType = (req.headers['content-type'] || '').toString().toLowerCase();
+
+    if (contentType.includes('multipart/form-data')) {
+        return parseMultipartFormData(raw, contentType);
+    }
+
+    if (contentType.includes('application/x-www-form-urlencoded')) {
+        const params = new URLSearchParams(raw);
+        const result: Record<string, string> = {};
+        params.forEach((value, key) => {
+            result[key] = value;
+        });
+        return result;
+    }
+
     try {
         return JSON.parse(raw);
     } catch {
         return raw;
     }
+}
+
+function parseMultipartFormData(raw: string, contentType: string): any {
+    const boundaryMatch = contentType.match(/boundary=([^;]+)/i);
+    if (!boundaryMatch) {
+        return raw;
+    }
+
+    const boundary = boundaryMatch[1].trim().replace(/^"|"$/g, '');
+    const marker = `--${boundary}`;
+    const sections = raw.split(marker);
+    const result: Record<string, string> = {};
+
+    for (const section of sections) {
+        const part = section.trim();
+        if (!part || part === '--') continue;
+        const splitIndex = part.search(/\r?\n\r?\n/);
+        if (splitIndex < 0) continue;
+
+        const headers = part.slice(0, splitIndex);
+        let value = part.slice(splitIndex).replace(/^\r?\n\r?\n/, '');
+        value = value.replace(/\r?\n--$/, '').trim();
+
+        const nameMatch = headers.match(/name="([^"]+)"/i);
+        if (!nameMatch) continue;
+        result[nameMatch[1]] = value;
+    }
+
+    return Object.keys(result).length ? result : raw;
 }
 
 export const routes: Record<string, RouteHandler> = {
@@ -90,14 +134,6 @@ export const routes: Record<string, RouteHandler> = {
     'POST /publish/:queue': async (_req, res, params, body) => {
         const queue = params.queue;
         if (!queue) return json(res, 400, { success: false, message: 'Missing queue' });
-
-        const contentType = (_req.headers['content-type'] || '').toString();
-        if (!contentType.startsWith('application/json')) {
-            return json(res, 400, {
-                success: false,
-                message: 'Invalid content type please use application/json',
-            });
-        }
 
         const requestId = body?.data?.requestId ?? null;
         const payload = body?.data?.esbBody ?? body;
