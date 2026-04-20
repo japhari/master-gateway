@@ -29,6 +29,57 @@ function extractTrackingRequestId(body: any): string {
     return candidate?.toString?.().trim?.() || '';
 }
 
+function sanitizePayloadForQueue(input: any): any {
+    if (input === null || input === undefined) return input;
+    if (Array.isArray(input)) {
+        return input.map(sanitizePayloadForQueue);
+    }
+    if (typeof input === 'object') {
+        const cleaned: Record<string, any> = {};
+        for (const [key, value] of Object.entries(input)) {
+            const keyNormalized = key.toLowerCase();
+            const isAttachmentLike =
+                keyNormalized.includes('attachment') ||
+                keyNormalized.includes('file[') ||
+                keyNormalized === 'file' ||
+                keyNormalized === 'files' ||
+                keyNormalized.includes('image[') ||
+                keyNormalized === 'image' ||
+                keyNormalized === 'images';
+            if (isAttachmentLike) continue;
+            cleaned[key] = sanitizePayloadForQueue(value);
+        }
+        return cleaned;
+    }
+    if (typeof input === 'string') {
+        // Drop suspicious binary-like values and cap very long strings.
+        const hasBinaryPattern = /\u0000|JFIF|PNG|Exif|ICC_PROFILE/i.test(input);
+        if (hasBinaryPattern) return '';
+        const maxLen = 8000;
+        return input.length > maxLen ? input.slice(0, maxLen) : input;
+    }
+    return input;
+}
+
+function normalizeIncidentPayload(input: any): any {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) return input;
+
+    const payload = { ...input } as Record<string, any>;
+
+    // Support client variants while preserving original keys.
+    if (!payload.incident_type && payload.incident_type_id) {
+        payload.incident_type = payload.incident_type_id;
+    }
+    if (!payload.location_type && payload.locationType) {
+        payload.location_type = payload.locationType;
+    }
+    if (!payload.reported_datetime && payload.reportedDateTime) {
+        payload.reported_datetime = payload.reportedDateTime;
+    }
+
+    return payload;
+}
+
 async function readBody(req: IncomingMessage): Promise<any> {
     const chunks: Buffer[] = [];
     for await (const chunk of req) {
@@ -39,6 +90,11 @@ async function readBody(req: IncomingMessage): Promise<any> {
     const contentType = (req.headers['content-type'] || '').toString().toLowerCase();
 
     if (contentType.includes('multipart/form-data')) {
+        return parseMultipartFormData(raw, contentType);
+    }
+
+    // Some clients send incorrect content-type while body is multipart.
+    if (raw.includes('Content-Disposition: form-data;')) {
         return parseMultipartFormData(raw, contentType);
     }
 
@@ -59,13 +115,53 @@ async function readBody(req: IncomingMessage): Promise<any> {
 }
 
 function parseMultipartFormData(raw: string, contentType: string): any {
-    const boundaryMatch = contentType.match(/boundary=([^;]+)/i);
-    if (!boundaryMatch) {
+    const markers = resolveMultipartMarkers(raw, contentType);
+    if (!markers.length) {
         return raw;
     }
 
-    const boundary = boundaryMatch[1].trim().replace(/^"|"$/g, '');
-    const marker = `--${boundary}`;
+    let best: Record<string, string> = {};
+    for (const marker of markers) {
+        const parsed = parseMultipartWithMarker(raw, marker);
+        if (Object.keys(parsed).length > Object.keys(best).length) {
+            best = parsed;
+        }
+    }
+
+    return Object.keys(best).length ? best : raw;
+}
+
+function resolveMultipartMarkers(raw: string, contentType: string): string[] {
+    const out: string[] = [];
+    const pushUnique = (m?: string) => {
+        if (!m || out.includes(m)) return;
+        out.push(m);
+    };
+
+    const fromHeaderRaw = contentType
+        .match(/boundary=([^;]+)/i)?.[1]
+        ?.trim()
+        .replace(/^"|"$/g, '');
+
+    if (fromHeaderRaw) {
+        pushUnique(`--${fromHeaderRaw}`);
+        if (fromHeaderRaw.startsWith('--')) {
+            pushUnique(`--${fromHeaderRaw.replace(/^--/, '')}`);
+        } else {
+            pushUnique(`----${fromHeaderRaw}`);
+        }
+    }
+
+    // Fallback: use first line if it looks like a multipart boundary marker.
+    const firstLine = raw.split(/\r?\n/, 1)[0]?.trim();
+    if (firstLine?.startsWith('--')) {
+        pushUnique(firstLine);
+    }
+
+    return out;
+}
+
+function parseMultipartWithMarker(raw: string, marker: string): Record<string, string> {
     const sections = raw.split(marker);
     const result: Record<string, string> = {};
 
@@ -81,10 +177,37 @@ function parseMultipartFormData(raw: string, contentType: string): any {
 
         const nameMatch = headers.match(/name="([^"]+)"/i);
         if (!nameMatch) continue;
-        result[nameMatch[1]] = value;
+        const fieldName = nameMatch[1];
+        const partTypeMatch = headers.match(/Content-Type:\s*([^\r\n;]+)/i);
+        const partType = (partTypeMatch?.[1] || '').toLowerCase();
+
+        // Skip file uploads and non-text multipart parts.
+        if (
+            /filename="/i.test(headers) ||
+            /^image\//.test(partType) ||
+            /^audio\//.test(partType) ||
+            /^video\//.test(partType) ||
+            partType === 'application/octet-stream'
+        ) {
+            continue;
+        }
+
+        // Defensive skip by field name for known attachment keys.
+        if (
+            /^(file|files|attachment|attachments|image|images)$/i.test(fieldName) ||
+            /^attachments?\[[^\]]*\]$/i.test(fieldName) ||
+            /^files?\[[^\]]*\]$/i.test(fieldName) ||
+            /^images?\[[^\]]*\]$/i.test(fieldName)
+        ) {
+            continue;
+        }
+
+        // Prevent forwarding very large field values that can trigger upstream 413.
+        const maxFieldLength = 20000;
+        result[fieldName] = value.length > maxFieldLength ? value.slice(0, maxFieldLength) : value;
     }
 
-    return Object.keys(result).length ? result : raw;
+    return result;
 }
 
 export const routes: Record<string, RouteHandler> = {
@@ -136,7 +259,9 @@ export const routes: Record<string, RouteHandler> = {
         if (!queue) return json(res, 400, { success: false, message: 'Missing queue' });
 
         const requestId = body?.data?.requestId ?? null;
-        const payload = body?.data?.esbBody ?? body;
+        const payload = normalizeIncidentPayload(
+            sanitizePayloadForQueue(body?.data?.esbBody ?? body),
+        );
         const result = await publishService.publish(queue, payload, requestId);
         return json(res, result.status, result.body);
     },
