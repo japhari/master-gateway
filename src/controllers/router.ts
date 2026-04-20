@@ -5,6 +5,7 @@ import { publishService } from '../services/publish.service';
 import { synchronousService } from '../services/synchronous.service';
 import { rabbitmqService } from '../services/rabbitmq.service';
 import { requestTrackerService } from '../services/request-tracker.service';
+import { maliasiliService } from '../services/maliasili.service';
 
 type RouteHandler = (
     req: IncomingMessage,
@@ -424,6 +425,30 @@ export const routes: Record<string, RouteHandler> = {
         const pathKey = params.path;
         const result = await synchronousService.handlePost(pathKey, body);
         return json(res, result.status, result.body);
+    },
+
+    // Internal proxy for Maliasili portal's group-peck endpoint.
+    // External: GET https://portal.maliasili.go.tz/api/v1/bills/{billId}/group-peck?api_key=...
+    // Internal: GET /api/maliasili/bills/{billId}/group-peck  (api_key is injected server-side)
+    'GET /api/maliasili/bills/:billId/group-peck': async (_req, res, params) => {
+        const billId = params.billId?.trim();
+        if (!billId || !/^\d+$/.test(billId)) {
+            return json(res, 400, { success: false, message: 'Invalid billId' });
+        }
+
+        try {
+            const data = await maliasiliService.getGroupPeck(billId);
+            return json(res, 200, { success: true, esbBody: data, message: 'OK' });
+        } catch (err: any) {
+            const status = typeof err?.status === 'number' ? err.status : 502;
+            return json(res, status, {
+                success: false,
+                message:
+                    typeof err?.message === 'string'
+                        ? err.message
+                        : err?.message || 'Maliasili request failed',
+            });
+        }
     },
 
     'GET /getRequestFromGovesb/:path': async (req, res, params) => {
