@@ -1,0 +1,1 @@
+pm2 restart master-gateway faru-mnrt-nbs && pm2 ls

@@ -6,6 +6,9 @@ import { synchronousService } from '../services/synchronous.service';
 import { rabbitmqService } from '../services/rabbitmq.service';
 import { requestTrackerService } from '../services/request-tracker.service';
 import { maliasiliService } from '../services/maliasili.service';
+import { httpService } from '../services/http.service';
+import { configService } from '../services/config.service';
+import * as localMediatorConfig from '../config/mediator.json';
 
 type RouteHandler = (
     req: IncomingMessage,
@@ -129,6 +132,18 @@ function parseMultipartFormData(raw: string, contentType: string): any {
         }
     }
 
+    // Some clients still produce malformed boundary framing.
+    // Fallback to a boundary-agnostic parser based on Content-Disposition blocks.
+    if (
+        !Object.keys(best).length ||
+        hasMultipartLeakage(best)
+    ) {
+        const dispositionParsed = parseMultipartByDisposition(raw);
+        if (Object.keys(dispositionParsed).length > Object.keys(best).length) {
+            best = dispositionParsed;
+        }
+    }
+
     return Object.keys(best).length ? best : raw;
 }
 
@@ -209,6 +224,71 @@ function parseMultipartWithMarker(raw: string, marker: string): Record<string, s
     }
 
     return result;
+}
+
+function parseMultipartByDisposition(raw: string): Record<string, string> {
+    const result: Record<string, string> = {};
+    const blockRegex =
+        /Content-Disposition:\s*form-data;\s*name="([^"]+)"(?:;\s*filename="([^"]*)")?\s*(?:\r?\nContent-Type:\s*([^\r\n]+))?\s*\r?\n\r?\n([\s\S]*?)(?=\r?\n--[^\r\n]+(?:--)?\r?\n?|\s*$)/gi;
+
+    let match: RegExpExecArray | null;
+    while ((match = blockRegex.exec(raw)) !== null) {
+        const fieldName = match[1];
+        const filename = match[2] || '';
+        const partType = (match[3] || '').toLowerCase();
+        let value = (match[4] || '').trim();
+
+        if (
+            filename ||
+            /^image\//.test(partType) ||
+            /^audio\//.test(partType) ||
+            /^video\//.test(partType) ||
+            partType === 'application/octet-stream'
+        ) {
+            continue;
+        }
+
+        if (
+            /^(file|files|attachment|attachments|image|images)$/i.test(fieldName) ||
+            /^attachments?\[[^\]]*\]$/i.test(fieldName) ||
+            /^files?\[[^\]]*\]$/i.test(fieldName) ||
+            /^images?\[[^\]]*\]$/i.test(fieldName)
+        ) {
+            continue;
+        }
+
+        const maxFieldLength = 20000;
+        result[fieldName] = value.length > maxFieldLength ? value.slice(0, maxFieldLength) : value;
+    }
+
+    return result;
+}
+
+function hasMultipartLeakage(parsed: Record<string, string>): boolean {
+    return Object.values(parsed).some(
+        (v) => typeof v === 'string' && /Content-Disposition:\s*form-data/i.test(v),
+    );
+}
+
+async function resolveMaliasiliTarget(path: string, apiKeyOverride?: string): Promise<string> {
+    const { maliasili } = await configService.getMaliasiliSettings();
+    const localMaliasili = ((localMediatorConfig as any)?.config?.maliasili || {}) as Record<string, any>;
+    const baseUrl = (maliasili?.baseUrl || localMaliasili?.baseUrl || '')
+        .toString()
+        .trim()
+        .replace(/\/+$/, '');
+    const apiKey =
+        (apiKeyOverride ?? '').toString().trim() ||
+        (maliasili?.apiKey || localMaliasili?.apiKey || '').toString().trim();
+
+    if (!baseUrl) {
+        throw new Error('Maliasili baseUrl is not configured');
+    }
+
+    const target = `${baseUrl}/${path.replace(/^\/+/, '')}`;
+    if (!apiKey) return target;
+    const separator = target.includes('?') ? '&' : '?';
+    return `${target}${separator}api_key=${encodeURIComponent(apiKey)}`;
 }
 
 export const routes: Record<string, RouteHandler> = {
@@ -447,6 +527,108 @@ export const routes: Record<string, RouteHandler> = {
                     typeof err?.message === 'string'
                         ? err.message
                         : err?.message || 'Maliasili request failed',
+            });
+        }
+    },
+
+    // Compatibility route:
+    // GET /api/v1/bills/group-check?bill_id=3010&api_key=...
+    // -> forwards to {maliasili.baseUrl}/bills/3010/group-peck?api_key=...
+    // Downstream currently exposes group-peck endpoint.
+    'GET /api/v1/bills/group-check': async (req, res) => {
+        const urlObj = new URL(req.url || '', 'http://localhost');
+        const billId = (urlObj.searchParams.get('bill_id') || '').trim();
+        const apiKey = (urlObj.searchParams.get('api_key') || '').trim();
+
+        if (!billId || !/^\d+$/.test(billId)) {
+            return json(res, 400, { success: false, message: 'Invalid or missing bill_id' });
+        }
+        if (!apiKey) {
+            return json(res, 400, { success: false, message: 'Missing api_key' });
+        }
+
+        try {
+            const targetUrl = await resolveMaliasiliTarget(`/bills/${encodeURIComponent(billId)}/group-peck`, apiKey);
+            const data = await httpService.getValues(targetUrl);
+            return json(res, 200, {
+                success: true,
+                esbBody: data,
+                message: 'Group check request forwarded successfully',
+            });
+        } catch (err: any) {
+            const status = typeof err?.response?.status === 'number' ? err.response.status : 502;
+            const downstream =
+                err?.response?.data?.message ||
+                err?.response?.data?.error ||
+                err?.response?.data ||
+                err?.message ||
+                'Group check forwarding failed';
+
+            return json(res, status, {
+                success: false,
+                message: typeof downstream === 'string' ? downstream : JSON.stringify(downstream),
+            });
+        }
+    },
+
+    // Backward-compatible alias for older clients still using group-peck.
+    'GET /api/v1/bills/group-peck': async (req, res, params, body) => {
+        return routes['GET /api/v1/bills/group-check'](req, res, params, body);
+    },
+
+    // Direct proxy route (no queue) for payment check.
+    // External target is resolved from maliasili baseUrl in mediator config.
+    // Internal route:  POST /api/v1/faru/payment-check
+    'POST /api/v1/faru/payment-check': async (_req, res, _params, body) => {
+        const payload = body?.data?.esbBody ?? body ?? {};
+
+        try {
+            const targetUrl = await resolveMaliasiliTarget('/faru/payment-check');
+            const data = await httpService.post(targetUrl, payload);
+            return json(res, 200, {
+                success: true,
+                esbBody: data,
+                message: 'Payment check request forwarded successfully',
+            });
+        } catch (err: any) {
+            const status = typeof err?.response?.status === 'number' ? err.response.status : 502;
+            const downstream =
+                err?.response?.data?.message ||
+                err?.response?.data?.error ||
+                err?.response?.data ||
+                err?.message ||
+                'Payment check forwarding failed';
+
+            return json(res, status, {
+                success: false,
+                message: typeof downstream === 'string' ? downstream : JSON.stringify(downstream),
+            });
+        }
+    },
+
+    // Direct proxy GET route (no queue) for payment check.
+    // Internal route: GET /api/v1/faru/payment-check
+    'GET /api/v1/faru/payment-check': async (_req, res) => {
+        try {
+            const targetUrl = await resolveMaliasiliTarget('/faru/payment-check');
+            const data = await httpService.getValues(targetUrl);
+            return json(res, 200, {
+                success: true,
+                esbBody: data,
+                message: 'Payment check request forwarded successfully',
+            });
+        } catch (err: any) {
+            const status = typeof err?.response?.status === 'number' ? err.response.status : 502;
+            const downstream =
+                err?.response?.data?.message ||
+                err?.response?.data?.error ||
+                err?.response?.data ||
+                err?.message ||
+                'Payment check forwarding failed';
+
+            return json(res, status, {
+                success: false,
+                message: typeof downstream === 'string' ? downstream : JSON.stringify(downstream),
             });
         }
     },

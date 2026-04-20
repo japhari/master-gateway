@@ -3,6 +3,7 @@ import * as http from 'http';
 import * as https from 'https';
 import * as winston from 'winston';
 import { configService } from './config.service';
+import * as localMediatorConfig from '../config/mediator.json';
 
 export interface MaliasiliError {
   status: number;
@@ -155,8 +156,13 @@ export class MaliasiliService {
 
   private async resolveSettings(): Promise<MaliasiliSettings> {
     const { maliasili } = await configService.getMaliasiliSettings();
-    const baseUrl = (maliasili.baseUrl || '').toString().trim().replace(/\/+$/, '');
-    const apiKey = (maliasili.apiKey || '').toString().trim();
+    const localMaliasili = ((localMediatorConfig as any)?.config?.maliasili || {}) as Record<string, any>;
+
+    const baseUrl = (maliasili.baseUrl || localMaliasili.baseUrl || '')
+      .toString()
+      .trim()
+      .replace(/\/+$/, '');
+    const apiKey = (maliasili.apiKey || localMaliasili.apiKey || '').toString().trim();
 
     if (!baseUrl) throw this.toError(500, 'Maliasili baseUrl is not configured');
     if (!apiKey) throw this.toError(500, 'Maliasili apiKey is not configured');
@@ -164,9 +170,12 @@ export class MaliasiliService {
     return {
       baseUrl,
       apiKey,
-      timeoutMs: this.toPositiveInt(maliasili.timeoutMs, DEFAULTS.timeoutMs),
-      retries: this.toNonNegativeInt(maliasili.retries, DEFAULTS.retries),
-      cacheTtlMs: this.toNonNegativeInt(maliasili.cacheTtlMs, DEFAULTS.cacheTtlMs),
+      timeoutMs: this.toPositiveInt(maliasili.timeoutMs ?? localMaliasili.timeoutMs, DEFAULTS.timeoutMs),
+      retries: this.toNonNegativeInt(maliasili.retries ?? localMaliasili.retries, DEFAULTS.retries),
+      cacheTtlMs: this.toNonNegativeInt(
+        maliasili.cacheTtlMs ?? localMaliasili.cacheTtlMs,
+        DEFAULTS.cacheTtlMs,
+      ),
     };
   }
 

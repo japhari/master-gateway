@@ -589,9 +589,15 @@
         "channelHttpMethod": "POST",
         "channelUrl": "http://localhost:5001/test-queue",
         "queueName": "TEST_QUEUE"
+      },
+      {
+        "queueStatus": "RUN",
+        "channelHttpMethod": "POST",
+        "channelUrl": "http://41.59.65.149:15001/api/v1/faru/payment-check",
+        "queueName": "PAYMENT_CHECK"
       }
     ],
-    "pubQueues": ["TEST_QUEUE"],
+    "pubQueues": ["TEST_QUEUE", "PAYMENT_CHECK"],
     "synchronousPath": [
       {
         "sourcePath": "tamisemi-tisp-api",
@@ -636,8 +642,8 @@
       "VHOST": "/"
     },
     "maliasili": {
-      "baseUrl": "https://portal.maliasili.go.tz/api/v1",
-      "apiKey": "",
+      "baseUrl": "https://test.maliasili.go.tz/api/v1",
+      "apiKey": "asdfasdfasd",
       "timeoutMs": 10000,
       "retries": 3,
       "cacheTtlMs": 60000
