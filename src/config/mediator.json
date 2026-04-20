@@ -76,6 +76,14 @@
       "port": "8090",
       "primary": true,
       "type": "http"
+    },
+    {
+      "name": "Maliasili Group Peck by Bill",
+      "host": "localhost",
+      "path": "/api/maliasili/bills/{billId}/group-peck",
+      "port": "8090",
+      "primary": true,
+      "type": "http"
     }
   ],
   "configDefs": [
@@ -176,6 +184,44 @@
           "displayName": "Async Request URL",
           "description": "GovESB async request endpoint",
           "type": "string"
+        }
+      ]
+    },
+    {
+      "param": "maliasili",
+      "displayName": "Maliasili Portal Credentials",
+      "description": "Credentials and base URL for the Maliasili portal",
+      "type": "struct",
+      "template": [
+        {
+          "param": "baseUrl",
+          "displayName": "Base URL",
+          "description": "Base URL including version, e.g. https://portal.maliasili.go.tz/api/v1",
+          "type": "string"
+        },
+        {
+          "param": "apiKey",
+          "displayName": "API Key",
+          "description": "API key appended to every outbound request as api_key query param",
+          "type": "password"
+        },
+        {
+          "param": "timeoutMs",
+          "displayName": "Request Timeout (ms)",
+          "description": "Request timeout in milliseconds (default 10000)",
+          "type": "number"
+        },
+        {
+          "param": "retries",
+          "displayName": "Retry Count",
+          "description": "Number of retry attempts for transient failures (default 3)",
+          "type": "number"
+        },
+        {
+          "param": "cacheTtlMs",
+          "displayName": "Cache TTL (ms)",
+          "description": "In-memory response cache TTL in milliseconds. Set 0 to disable (default 60000)",
+          "type": "number"
         }
       ]
     },
@@ -589,9 +635,16 @@
       "host": "localhost",
       "VHOST": "/"
     },
+    "maliasili": {
+      "baseUrl": "https://portal.maliasili.go.tz/api/v1",
+      "apiKey": "",
+      "timeoutMs": 10000,
+      "retries": 3,
+      "cacheTtlMs": 60000
+    },
     "govesb": {
-      "clientPrivateKey": "MD4CAQAwEAYHKoZIzj0CAQYFK4EEAAoEJzAlAgEBBCCQ2NpfUXNGXJ/MHAflPR++aAIm2sjjNDuwxmym0XOGFg==",
-      "clientPublicKey": "MFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEpKXUn8u8r2Etg4K96rfPyYwVTrtHPvZVYXvvlR1Ta9M7G0IKKpUoeW47ZYUios0oqUxWzplLnWT1dPVj2aeNGQ==",
+      "clientPrivateKey": "MD4CAQAwEAYHKoZIzj0CAQYFK4EEAAoEJzAlAgEBBCDogxWcbGOYEu/CkFK7nMW/JpdktgAITfbLS3vAXXc/nA==",
+      "clientPublicKey": "MFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAETGoFlP1hKOj/JjEXfIDaunnlhKQ7oHDpr/+7Uo4hdB6ZPeY7evNaEKq2e3LSoGsoiERk8dcEjSmaovD64ozUXg==",
       "govesbPublicKey": "MFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEon0az66Kz+6ZIz4G7La8uPeSbOT/E/suRjNMgFQ4isjJwFXaS20vHcndEFxXz8M68sbxkbLrGuNS/wFcEzubWQ==",
       "clientId": "ebb2f543-ff04-11ee-a4cd-cf3cf83aeb5e",
       "clientSecret": "ayWznGxQzcFA8lBxHr1TLIRunpmQxCjw",

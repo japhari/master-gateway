@@ -39,6 +39,11 @@ export class ConfigService {
     const config = await this.loadConfig();
     return { config, govesb: config?.govesb || {} };
   }
+
+  async getMaliasiliSettings(): Promise<{ config: any; maliasili: Record<string, any> }> {
+    const config = await this.loadConfig();
+    return { config, maliasili: config?.maliasili || {} };
+  }
 }
 
 export const configService = new ConfigService();
