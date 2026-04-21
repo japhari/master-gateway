@@ -597,7 +597,7 @@
         "queueName": "PAYMENT_CHECK"
       }
     ],
-    "pubQueues": ["TEST_QUEUE", "PAYMENT_CHECK"],
+    "pubQueues": ["TEST_QUEUE", "PAYMENT_CHECK","TAIV1TOV2"],
     "synchronousPath": [
       {
         "sourcePath": "tamisemi-tisp-api",
