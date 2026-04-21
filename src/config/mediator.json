@@ -623,6 +623,13 @@
         "channelHttpMethod": "POST",
         "apiPushCode": "4PrUIzNR",
         "apiCode": "4PrUIzNR"
+      },
+      {
+        "sourcePath": "nbs-to-tisp",
+        "status": "RUN",
+        "channelHttpMethod": "POST",
+        "apiPushCode": "REPLACE_WITH_TISP_PUSH_CODE",
+        "apiCode": "REPLACE_WITH_TISP_API_CODE"
       }
     ],
     "synchronousPullRequest": [

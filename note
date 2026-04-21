@@ -1,1 +1,13 @@
 pm2 restart master-gateway faru-mnrt-nbs && pm2 ls
+
+pm2 restart master-gateway --update-env && sleep 2 && pm2 list | grep -E "name|master-gateway"
+
+
+pm2 logs master-gateway --lines 200 --nostream
+
+
+curl "http://localhost:8095/nbs-data?period=2026-04&requestTime=2026-04-19&indicatorId=9"
+curl "http://localhost:8095/nbs-data?period=2026-04&indicatorId=9"
+curl "http://localhost:8095/nbs-data?period=2026-04-19&indicatorId=9"
+curl "http://localhost:8095/nbs-data?period=Yearly&requestTime=2026&indicatorId=9"
+curl "http://localhost:8095/nbs-data?period=Quarterly&requestTime=2026Q2&indicatorId=9"
