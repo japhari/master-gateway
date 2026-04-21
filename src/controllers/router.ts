@@ -41,6 +41,12 @@ function sanitizePayloadForQueue(input: any): any {
     if (typeof input === 'object') {
         const cleaned: Record<string, any> = {};
         for (const [key, value] of Object.entries(input)) {
+            // Pass the multipart pass-through envelope opaquely - consumer
+            // re-posts these raw bytes with the original content-type.
+            if (key === '__multipart') {
+                cleaned[key] = value;
+                continue;
+            }
             const keyNormalized = key.toLowerCase();
             const isAttachmentLike =
                 keyNormalized.includes('attachment') ||
@@ -84,22 +90,40 @@ function normalizeIncidentPayload(input: any): any {
     return payload;
 }
 
+// Hard cap on raw multipart bodies we will carry through RabbitMQ.
+// Above this size the raw bytes are dropped (fields still parsed so the JSON
+// path still works) to protect the broker from very large frames.
+const MAX_MULTIPART_PASSTHROUGH_BYTES = 25 * 1024 * 1024;
+
 async function readBody(req: IncomingMessage): Promise<any> {
     const chunks: Buffer[] = [];
     for await (const chunk of req) {
         chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
     }
     if (!chunks.length) return undefined;
-    const raw = Buffer.concat(chunks).toString('utf8');
-    const contentType = (req.headers['content-type'] || '').toString().toLowerCase();
+    const rawBuf = Buffer.concat(chunks);
+    const raw = rawBuf.toString('utf8');
+    const contentTypeRaw = (req.headers['content-type'] || '').toString();
+    const contentType = contentTypeRaw.toLowerCase();
 
-    if (contentType.includes('multipart/form-data')) {
-        return parseMultipartFormData(raw, contentType);
-    }
+    const isMultipart =
+        contentType.includes('multipart/form-data') ||
+        // Some clients send incorrect content-type while body is multipart.
+        raw.includes('Content-Disposition: form-data;');
 
-    // Some clients send incorrect content-type while body is multipart.
-    if (raw.includes('Content-Disposition: form-data;')) {
-        return parseMultipartFormData(raw, contentType);
+    if (isMultipart) {
+        const fields = parseMultipartFormData(raw, contentType);
+        const parsed = (fields && typeof fields === 'object' && !Array.isArray(fields))
+            ? (fields as Record<string, any>)
+            : { value: fields };
+        if (rawBuf.length <= MAX_MULTIPART_PASSTHROUGH_BYTES) {
+            parsed.__multipart = {
+                contentType: contentTypeRaw,
+                bodyBase64: rawBuf.toString('base64'),
+                size: rawBuf.length,
+            };
+        }
+        return parsed;
     }
 
     if (contentType.includes('application/x-www-form-urlencoded')) {
